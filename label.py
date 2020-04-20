@@ -45,9 +45,9 @@ for idx in range(len(contours)):
     if r > 0.45 and w > 8 and h > 8:
         cv2.rectangle(rgb, (x-1, y-1), (x+w-1, y+h-1), (0, 255, 0), 2)
         new_img = rgb[y:y+h, x:x+w]
-        cv2.adaptiveBilateralFilter(new_img,(11,11),50)
-        cv2.threshold(new_img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-        kernel = np.ones((9,9),np.uint8) 
+        cv2.medianBlur(new_img,9)
+        cv2.threshold(new_img, 0, 255, cv2.THRESH_BINARY )
+        kernel = np.ones((1,9),np.uint8) 
         cv2.morphologyEx(new_img, cv2.MORPH_OPEN, kernel)
         cv2.Canny(new_img, 100, 200)
         new_img = cv2.resize(new_img, None, fx=5.5, fy=4.5, interpolation=cv2.INTER_CUBIC)
