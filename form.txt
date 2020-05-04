@@ -1,0 +1,168 @@
+!pip install pytesseract
+!sudo apt install tesseract-ocr
+-------------------------------------------------------
+import json
+
+class field:
+  def __init__(self, txt=None,txtrect=(-1,-1,-1,-1),ftype=None):
+    self.txt=txt
+    self.txtrect=txtrect
+    self.ftype=ftype
+    self.struct={"ftype":None,"ftxt":txt,"txtrect":tuple(txtrect),"fradius":0,"fcenter":tuple((-1,-1)),"fboundingBox":tuple((-1,-1,-1,-1))}
+
+  def printJson(self):
+    print(json.dumps(self.struct,indent = 4))
+
+class radio:
+  def __init__(self, pos=(-1,-1,-1)):
+    self.pos=pos
+    self.fname="radio"
+
+class date:
+  def __init__(self, bbox=(-1,-1,-1,-1)):
+    self.bbox=bbox
+    self.fname="date"
+
+class textField:
+  def __init__(self, bbox=(-1,-1,-1,-1)):
+    self.bbox=bbox
+    self.fname="textField"
+ ---------------------------------------------------------   
+import numpy as np
+import cv2
+import pytesseract
+from PIL import Image
+from google.colab.patches import cv2_imshow
+
+large = cv2.imread('/content/drive/My Drive/FormProcessing/sample_forms/test.jpeg')
+h = large.shape[0]
+w = large.shape[1]
+h = h*1/2
+w = w*1/2
+rgb = cv2.resize(large, (int(w), int(h)) )
+#rgb = cv2.pyrDown(large)
+small = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+# kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+kernel = np.ones((7,12), np.uint8)
+grad = cv2.morphologyEx(small, cv2.MORPH_GRADIENT, kernel)
+
+_, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+#k = 4 or 5
+kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10,4))
+connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+
+# using RETR_EXTERNAL instead of RETR_CCOMP
+contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+mask = np.zeros(bw.shape, dtype=np.uint8)
+count=0
+fields=[]
+for idx in range(len(contours)):
+    x, y, w, h = cv2.boundingRect(contours[idx])
+    mask[y:y+h, x:x+w] = 0
+    cv2.drawContours(mask, contours, idx, (255, 255, 255), -1)
+    r = float(cv2.countNonZero(mask[y:y+h, x:x+w])) / (w * h)
+
+    if r > 0.45 and w > 8 and h > 8:
+        cv2.rectangle(rgb, (x-1, y-1), (x+w-1, y+h-1), (0, 255, 0), 2)
+        new_img = rgb[y:y+h, x:x+w]
+        cv2.medianBlur(new_img,9)
+        cv2.threshold(new_img, 0, 255, cv2.THRESH_BINARY )
+        kernel = np.ones((1,9),np.uint8) 
+        cv2.morphologyEx(new_img, cv2.MORPH_OPEN, kernel)
+        cv2.Canny(new_img, 100, 200)
+        new_img = cv2.resize(new_img, None, fx=5.5, fy=4.5, interpolation=cv2.INTER_CUBIC)
+        text = pytesseract.image_to_string(new_img)
+        if text!="" and text!=" ":
+            fields.append(field(text,(x,y,w,h)))
+            # count+=1;
+            # print('field '+str(count)+') '+text)
+            # print("\n")
+
+ret,thresh = cv2.threshold(small, 200, 255,cv2.THRESH_BINARY)
+
+c = cv2.HoughCircles(thresh, cv2.HOUGH_GRADIENT,1, 15, param1=50, param2=14, minRadius=5,maxRadius=10)
+c = np.uint16(np.around(c))
+
+res1=rgb.copy()
+for i in c[0,:]:
+    # draw the outer circle
+    cv2.circle(res1,(i[0],i[1]),i[2],(255,0,0),2)
+
+#cv2_imshow(res1)
+
+
+blurred = cv2.GaussianBlur(small, (5,5), 0)
+ret,thresh1 = cv2.threshold(blurred,244,255,cv2.THRESH_BINARY)
+contours, hierarchy = cv2.findContours(
+    thresh1, cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+
+
+rects = []
+
+res2=res1.copy()
+
+for c in contours:
+    x, y, w, h = cv2.boundingRect(c)
+    if w*h>50 and w>5 and h>5 and w*h<thresh1.shape[0]*thresh1.shape[1]*0.5:
+      
+      peri = cv2.arcLength(c, True)
+      approx = cv2.approxPolyDP(c, 0.005 * peri,False)
+      # check if the approximated contour has four points
+      # if so, it can be labelled as a rectangle
+      if len(approx) <25:
+        rects.append([x,y,w,h])
+        cv2.rectangle(res2,(x,y),(x+w,y+h), (0,0,255), 2)
+
+
+
+cv2_imshow(res2)
+----------------------------------------------------------------------
+blurred = cv2.GaussianBlur(small, (5,5), 0)
+ret,thresh1 = cv2.threshold(blurred,240,255,cv2.THRESH_BINARY)
+
+cv2_imshow(thresh1)
+
+
+contours, hierarchy = cv2.findContours(
+    thresh1, cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+
+
+res2=rgb.copy()
+rects = []
+
+for c in contours:
+    x, y, w, h = cv2.boundingRect(c)
+    if w*h>50 and w>5 and h>5 and w*h<thresh1.shape[0]*thresh1.shape[1]*0.5:
+      
+      peri = cv2.arcLength(c, True)
+      approx = cv2.approxPolyDP(c, 0.005 * peri,False)
+      # check if the approximated contour has four points
+      # if so, it can be labelled as a rectangle
+      if len(approx) <25:
+        rects.append((x,y,w,h))
+        cv2.rectangle(res2,(x,y),(x+w,y+h), (0,0,255), 2)
+        #rects.append(approx)
+
+
+
+cv2_imshow(res2)
+--------------------------------------------------------------------
+
+fields.sort(key=lambda x:( x.txtrect[1] , x.txtrect[0]))
+rects.sort(key=lambda x: (x[1] , x[0]))
+
+f=fields.copy()
+r=[rects.copy()]
+
+for a in f:
+  (x1,y1,w1,h1)=a.txtrect
+  for b in rects:
+    (x2,y2,w2,h2)=b
+    ar=(x2+w2-x1)*(y2+h2-y1)
+    if abs(y2-(y1+h1)) <5 and ar > w2*h2:
+      cv2_imshow(cv2.rectangle(res2.copy(),(x1,y1),(x2+w2,y2+h2), (205,19,182), 3))
+      a.ftype=textField((x1,y1,x2+w2,y2+h2))
+      a.struct["fboundingBox"]=a.ftype.bbox
+      print(abs(y2-(y1+h1)))
+      break
