@@ -1,2 +1,3 @@
 # form_processing
-for xtracting various widgets of a form
+for extracting various widgets of a form,
+here the widgets are seen as geometric shapes to be extracted from the sacnned form.
